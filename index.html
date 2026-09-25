@@ -20,17 +20,20 @@
       </span>
       <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Norsk–Tyrkisk Ordbok</h1>
       <p class="text-xs text-slate-500 mt-1">Pedagogisk ordbok med ordklasser, eksempler og nyanser</p>
+      
+      <button onclick="ayarlaAPIKey()" class="mt-3 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-full font-medium inline-flex items-center gap-1 shadow-sm transition">
+        🔑 <span id="keyBtnText">API Key Ayarla</span>
+      </button>
     </div>
 
     <!-- Search Box -->
     <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex gap-2">
       <input type="text" id="searchInput" placeholder="Skriv et norsk ord..." 
              class="flex-1 px-4 py-3 text-slate-900 bg-transparent outline-none text-base font-medium placeholder-slate-400"
-             oninput="canliArama()"
              onkeypress="if(event.key === 'Enter') araKelime()">
-      <button onclick="araKelime()" 
-              class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-xl transition duration-200">
-        Søk
+      <button onclick="araKelime()" id="searchBtn" 
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-xl transition duration-200 flex items-center justify-center">
+        Oversett
       </button>
     </div>
 
@@ -42,8 +45,14 @@
       <button onclick="harfEkle('å')" class="px-3 py-1 bg-white border border-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-100 text-slate-700 shadow-sm">å</button>
     </div>
 
-    <!-- Sonuç Kartı -->
-    <div id="resultCard" class="hidden mt-6 bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+    <!-- Loading State -->
+    <div id="loading" class="hidden text-center py-10">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+      <p class="text-sm font-medium text-slate-500 mt-2">Henter forklaring og eksempler...</p>
+    </div>
+
+    <!-- Result Card -->
+    <div id="resultCard" class="hidden mt-6 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all">
       <div class="flex justify-between items-start border-b border-slate-100 pb-4">
         <div>
           <h2 id="resWord" class="text-2xl font-bold text-slate-900 capitalize"></h2>
@@ -71,144 +80,112 @@
       </div>
     </div>
 
-    <!-- Bulunamadı Uyarısı & Hızlı Ekleme -->
-    <div id="notFoundCard" class="hidden mt-6 bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-      <p class="text-sm text-slate-600">Dette ordet finnes ikke i basen ennå.</p>
-      <button onclick="toggleEkleForm()" class="mt-3 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg font-medium inline-block transition">
-        ➕ Bu Kelimeyi Sözlüğe Ekle
-      </button>
+    <!-- Error Alert -->
+    <div id="errorAlert" class="hidden mt-4 p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl"></div>
 
-      <!-- Manuel Ekleme Formu -->
-      <div id="ekleForm" class="hidden mt-4 pt-4 border-t border-slate-100 space-y-3">
-        <input type="text" id="yeniSinif" placeholder="Ordklasse (f.eks. adjektiv, verb)" class="w-full text-xs p-2.5 border rounded-lg outline-none">
-        <input type="text" id="yeniAnlam" placeholder="Türkçe Anlamı" class="w-full text-xs p-2.5 border rounded-lg outline-none">
-        <input type="text" id="yeniOrnekNo" placeholder="Norveççe Örnek Cümle" class="w-full text-xs p-2.5 border rounded-lg outline-none">
-        <input type="text" id="yeniOrnekTr" placeholder="Örnek Cümlenin Türkçesi" class="w-full text-xs p-2.5 border rounded-lg outline-none">
-        <input type="text" id="yeniNot" placeholder="Pedagojik Not (kural, ipucu)" class="w-full text-xs p-2.5 border rounded-lg outline-none">
-        <button onclick="kelimeyiKaydet()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2.5 rounded-lg transition">
-          Sözlüğe Kaydet
-        </button>
-      </div>
-    </div>
-
-    <!-- Kelime Listesi / Hafıza -->
+    <!-- History -->
     <div class="mt-8 bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
       <div class="flex justify-between items-center mb-3">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Ord i Basen (<span id="totalWordCount">0</span>)</h3>
+        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Søkehistorikk</h3>
+        <button onclick="gecmisiTemizle()" class="text-xs text-red-500 hover:underline">Tøm</button>
       </div>
-      <div id="allWordList" class="flex flex-wrap gap-2 text-sm max-h-48 overflow-y-auto"></div>
+      <div id="historyList" class="flex flex-wrap gap-2 text-sm">
+        <span class="text-xs text-slate-400">Henüz arama yapılmadı.</span>
+      </div>
     </div>
   </div>
 
   <script>
-    // Dahili Başlangıç Veritabanı
-    const varsayilanKelimeler = {
-      "slurvete": {
-        "ord": "slurvete",
-        "ordklasse": "adjektiv",
-        "betydning": "özensiz, baştan savma, dikkatsiz",
-        "eksempel_no": "Det er slurvete gjort å glemme leksene sine.",
-        "eksempel_tr": "Ödevlerini unutmak baştan savma bir davranıştır.",
-        "pedagogisk_notat": "Hem somut işler için hem de birinin genel tavrı için sıfat olarak kullanılır. Değişmez: et slurvete arbeid."
-      },
-      "glede": {
-        "ord": "glede",
-        "ordklasse": "substantiv / verb",
-        "betydning": "sevinç, neşe / sevindirmek",
-        "eksempel_no": "Det er en stor glede å se elevene lykkes.",
-        "eksempel_tr": "Öğrencilerin başardığını görmek büyük bir sevinçtir.",
-        "pedagogisk_notat": "Å glede seg til: dört gözle beklemek (preposisjonsbruk)."
-      },
-      "ansvar": {
-        "ord": "ansvar",
-        "ordklasse": "substantiv (nøytrum)",
-        "betydning": "sorumluluk",
-        "eksempel_no": "Læreren har et stort ansvar for elevenes trivsel.",
-        "eksempel_tr": "Öğretmenin öğrencilerin refahı için büyük bir sorumluluğu vardır.",
-        "pedagogisk_notat": "Å ta ansvar for (sorumluluk almak), å ha ansvar (sorumlu olmak)."
+    function durumGuncelle() {
+      const key = localStorage.getItem('norsk_ordbok_api_key');
+      const btn = document.getElementById('keyBtnText');
+      if (key) {
+        btn.innerText = 'API Key Kayıtlı (Değiştir)';
+      } else {
+        btn.innerText = 'API Key Ayarla';
       }
-    };
+    }
 
-    function veritabaniniAl() {
-      const yerel = localStorage.getItem('statik_ordbok_db');
-      if (!yerel) {
-        localStorage.setItem('statik_ordbok_db', JSON.stringify(varsayilanKelimeler));
-        return varsayilanKelimeler;
+    function ayarlaAPIKey() {
+      const mevcut = localStorage.getItem('norsk_ordbok_api_key') || '';
+      const key = prompt('Google AI Studio API Keyinizi girin:', mevcut);
+      if (key !== null && key.trim() !== '') {
+        localStorage.setItem('norsk_ordbok_api_key', key.trim());
+        durumGuncelle();
       }
-      return JSON.parse(yerel);
     }
 
     function harfEkle(harf) {
       const input = document.getElementById('searchInput');
       input.value += harf;
       input.focus();
-      canliArama();
     }
 
-    function araKelime() {
-      const query = document.getElementById('searchInput').value.trim().toLowerCase();
+    async function araKelime() {
+      const input = document.getElementById('searchInput');
+      const query = input.value.trim();
       if (!query) return;
 
-      const db = veritabaniniAl();
-      const sonuc = db[query];
-
-      const resCard = document.getElementById('resultCard');
-      const notFoundCard = document.getElementById('notFoundCard');
-
-      if (sonuc) {
-        notFoundCard.classList.add('hidden');
-        document.getElementById('resWord').innerText = sonuc.ord;
-        document.getElementById('resClass').innerText = sonuc.ordklasse;
-        document.getElementById('resMeaning').innerText = sonuc.betydning;
-        document.getElementById('resExampleNo').innerText = sonuc.eksempel_no;
-        document.getElementById('resExampleTr').innerText = sonuc.eksempel_tr;
-        document.getElementById('resNote').innerText = sonuc.pedagogisk_notat;
-        resCard.classList.remove('hidden');
-      } else {
-        resCard.classList.add('hidden');
-        notFoundCard.classList.remove('hidden');
-        document.getElementById('ekleForm').classList.add('hidden');
-      }
-    }
-
-    function canliArama() {
-      const query = document.getElementById('searchInput').value.trim().toLowerCase();
-      if (query.length >= 2) {
-        araKelime();
-      }
-    }
-
-    function toggleEkleForm() {
-      const form = document.getElementById('ekleForm');
-      form.classList.toggle('hidden');
-    }
-
-    function kelimeyiKaydet() {
-      const ord = document.getElementById('searchInput').value.trim().toLowerCase();
-      const ordklasse = document.getElementById('yeniSinif').value.trim() || 'adjektiv/verb/substantiv';
-      const betydning = document.getElementById('yeniAnlam').value.trim();
-      const eksempel_no = document.getElementById('yeniOrnekNo').value.trim();
-      const eksempel_tr = document.getElementById('yeniOrnekTr').value.trim();
-      const pedagogisk_notat = document.getElementById('yeniNot').value.trim();
-
-      if (!betydning) {
-        alert('Lütfen en azından bir Türkçe anlam yazın.');
+      const apiKey = localStorage.getItem('norsk_ordbok_api_key');
+      if (!apiKey) {
+        alert('Lütfen önce yukarıdaki butondan API Key tanımlayın!');
+        ayarlaAPIKey();
         return;
       }
 
-      const db = veritabaniniAl();
-      db[ord] = { ord, ordklasse, betydning, eksempel_no, eksempel_tr, pedagogisk_notat };
-      localStorage.setItem('statik_ordbok_db', JSON.stringify(db));
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('resultCard').classList.add('hidden');
+      document.getElementById('errorAlert').classList.add('hidden');
 
-      // Temizle ve göster
-      document.getElementById('yeniSinif').value = '';
-      document.getElementById('yeniAnlam').value = '';
-      document.getElementById('yeniOrnekNo').value = '';
-      document.getElementById('yeniOrnekTr').value = '';
-      document.getElementById('yeniNot').value = '';
-      
-      araKelime();
-      listeyiYenile();
+      const promptMetni = `Du er en pedagogisk ordbokassistent for norsklærere og elever.
+Analyser ordet: "${query}".
+Svar KUN i ren JSON-format uten markdown eller backticks:
+{
+  "ord": "${query}",
+  "ordklasse": "substantiv/verb/adjektiv osv.",
+  "betydning": "Tyrkisk oversettelse (hovedbetydning og eventuelle nyanser)",
+  "eksempel_no": "En naturlig pedagogisk eksempelsetning på norsk",
+  "eksempel_tr": "Eksempelsetningens tyrkiske oversettelse",
+  "pedagogisk_notat": "Bøyningsmønster, preposisjonsbruk eller kulturell kontekst"
+}`;
+
+      try {
+        const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + encodeURIComponent(apiKey);
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptMetni }] }]
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        let rawText = data.candidates[0].content.parts[0].text;
+        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const res = JSON.parse(rawText);
+
+        document.getElementById('resWord').innerText = res.ord;
+        document.getElementById('resClass').innerText = res.ordklasse;
+        document.getElementById('resMeaning').innerText = res.betydning;
+        document.getElementById('resExampleNo').innerText = res.eksempel_no;
+        document.getElementById('resExampleTr').innerText = res.eksempel_tr;
+        document.getElementById('resNote').innerText = res.pedagogisk_notat;
+
+        document.getElementById('resultCard').classList.remove('hidden');
+        gecmiseEkle(res.ord);
+      } catch (err) {
+        const errBox = document.getElementById('errorAlert');
+        errBox.innerText = 'Hata: ' + err.message;
+        errBox.classList.remove('hidden');
+      } finally {
+        document.getElementById('loading').classList.add('hidden');
+      }
     }
 
     function seslendir() {
@@ -219,22 +196,37 @@
       window.speechSynthesis.speak(utterance);
     }
 
-    function listeyiYenile() {
-      const db = veritabaniniAl();
-      const container = document.getElementById('allWordList');
-      const keys = Object.keys(db);
-      document.getElementById('totalWordCount').innerText = keys.length;
+    function gecmiseEkle(kelime) {
+      let gecmis = JSON.parse(localStorage.getItem('norsk_gecmis') || '[]');
+      gecmis = gecmis.filter(k => k.toLowerCase() !== kelime.toLowerCase());
+      gecmis.unshift(kelime);
+      if (gecmis.length > 20) gecmis.pop();
+      localStorage.setItem('norsk_gecmis', JSON.stringify(gecmis));
+      gecmisGoster();
+    }
 
-      container.innerHTML = keys.map(k => `
+    function gecmisGoster() {
+      const gecmis = JSON.parse(localStorage.getItem('norsk_gecmis') || '[]');
+      const container = document.getElementById('historyList');
+      if (gecmis.length === 0) {
+        container.innerHTML = '<span class="text-xs text-slate-400">Henüz arama yapılmadı.</span>';
+        return;
+      }
+      container.innerHTML = gecmis.map(k => `
         <button onclick="document.getElementById('searchInput').value='${k}'; araKelime();" 
-                class="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-lg text-xs font-medium transition">
+                class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition">
           ${k}
         </button>
       `).join('');
     }
 
-    // Başlat
-    listeyiYenile();
+    function gecmisiTemizle() {
+      localStorage.removeItem('norsk_gecmis');
+      gecmisGoster();
+    }
+
+    durumGuncelle();
+    gecmisGoster();
   </script>
 </body>
 </html>
