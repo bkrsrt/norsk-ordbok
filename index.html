@@ -150,13 +150,17 @@ Svar KUN i ren JSON-format uten markdown eller backticks:
 }`;
 
       try {
-        const endpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-3.8-flash-lite:generateContent?key=' + encodeURIComponent(apiKey);
+        const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + encodeURIComponent(apiKey);
         
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: promptMetni }] }]
+            contents: [{ parts: [{ text: promptMetni }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 800
+            }
           })
         });
 
@@ -166,19 +170,24 @@ Svar KUN i ren JSON-format uten markdown eller backticks:
           throw new Error(data.error.message);
         }
 
-        let rawText = data.candidates[0].content.parts[0].text;
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const res = JSON.parse(rawText);
+        let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("Yanıt formatı çözülemedi: " + rawText.substring(0, 100));
+        }
 
-        document.getElementById('resWord').innerText = res.ord;
-        document.getElementById('resClass').innerText = res.ordklasse;
-        document.getElementById('resMeaning').innerText = res.betydning;
-        document.getElementById('resExampleNo').innerText = res.eksempel_no;
-        document.getElementById('resExampleTr').innerText = res.eksempel_tr;
-        document.getElementById('resNote').innerText = res.pedagogisk_notat;
+        const res = JSON.parse(jsonMatch[0]);
+
+        document.getElementById('resWord').innerText = res.ord || query;
+        document.getElementById('resClass').innerText = res.ordklasse || '';
+        document.getElementById('resMeaning').innerText = res.betydning || '';
+        document.getElementById('resExampleNo').innerText = res.eksempel_no || '';
+        document.getElementById('resExampleTr').innerText = res.eksempel_tr || '';
+        document.getElementById('resNote').innerText = res.pedagogisk_notat || '';
 
         document.getElementById('resultCard').classList.remove('hidden');
-        gecmiseEkle(res.ord);
+        gecmiseEkle(res.ord || query);
       } catch (err) {
         const errBox = document.getElementById('errorAlert');
         errBox.innerText = 'Hata: ' + err.message;
